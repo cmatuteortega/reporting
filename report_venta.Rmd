@@ -15,6 +15,9 @@ header-includes:
   - \titlegraphic{\vspace{-3.9cm}\hspace*{5.81cm}\raisebox{50cm}{\includegraphics[height=0.8\paperwidth]{images/porta2.pdf}}}
   - \usepackage{siunitx}
   - \sisetup{group-separator={.}}
+  - \usepackage{booktabs}
+  - \usepackage{colortbl}
+  - \usepackage{makecell}
 fontsize: 9pt
 ---
 
@@ -102,7 +105,7 @@ init <- data.table(read_excel('0init_venta.xlsx'))
 init_mes <- init[Variable=='Mes']$Value
 init_year <- init[Variable=='Año']$Value
 
-time_data <- fread('date_converter.csv')
+time_data <- fread('time_converter.csv')
 time_data <- time_data[Inputmes==init_mes & Inputyear ==init_year]
 mesnum <- time_data$Inputmes
 year <- time_data$Inputyear
@@ -150,6 +153,11 @@ cuvo_sql <- 'SELECT * FROM digital_business_reporting.cuvo'
 cuvo <- data.table(bq_table_download(bq_project_query(projectid,cuvo_sql)))
 cuvo <- cuvo[service_month == mesdia] 
 
+# OCUPACION TURNO
+turno_sql <- 'SELECT * FROM digital_business_reporting.ocupacion_turnos'
+turno <- data.table(bq_table_download(bq_project_query(projectid,turno_sql)))
+turno <- turno[service_date == as.POSIXct(mesdia)] 
+
 # ------------------------------ (EXTRA: CÁLCULOS TIENDAS) -------------------------------
 # PESO TIENDA 
 tiendas_sql <- 'SELECT * FROM digital_business_reporting.venta_tiendas'
@@ -169,6 +177,9 @@ tiendas_fcst <- fread('tiendas_forecast_manual.csv')
 
 # VENTA POR AREA MAD2
 tc_mad <- fread('tc_mad2.csv')
+tc_mad <- tc_mad[`Fecha Entrega`>=mesdialy]
+mesdialyotro <- mesdialy+31
+tc_mad <- tc_mad[`Fecha Entrega`<=mesdialyotro]
 sql_ventamad <- 'SELECT * FROM digital_business_reporting.mad2venta'
 sql_ventamad <- data.table(bq_table_download(bq_project_query(projectid,sql_ventamad)))
 venta_mad <- sql_ventamad[month(mes)==mesnum]
@@ -196,7 +207,7 @@ master_pred <- data.table(bq_table_download(bq_project_query(projectid,master_pr
 subtitle: '\LARGE `r mes`'
 ---
 
-## NOVIEMBRE 2023 - VENTA MM€
+## DICIEMBRE 2023 - VENTA MM€
 
 \vspace{-2.0cm}
 
@@ -230,7 +241,7 @@ ggplot(resumen_final, aes(x = reorder(COLMENAS, -venta_total), y = venta_total, 
     axis.line=element_line(color='black'),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank() 
-  ) 
+  )
 
 ```
 
@@ -267,13 +278,15 @@ resumenaco[vsly=='NA%',vsly:='']
 res <- t(resumenaco[,c(7,5,6)])
 rownames(res) <- c('Centro','vs Previsión',titulo)
 
+res[nchar(res)>4] <- ""
+
 kable(res,align = 'c', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(font_size = 7)
 
 # TABLA RESUMEN AGREGADO TODO MO  ------------------------------------------------------
 
-total_mo <- data.table('Total MO' = sum(resumen_inicial$venta_total), 'vs Previsión' = paste0(round(100*(1-(sum(master_pred$pred_facturacion)/1000000)/sum(resumen_inicial$venta_total)),0),"%"), titulo =  paste0(round(100*(1-(sum(sample[mes == mesdialy]$venta,na.rm=T)/1000000)/sum(resumen_inicial$venta_total)),0),"%") )
+total_mo <- data.table('Total MO' = sum(resumen_inicial$venta_total), 'vs Previsión' = paste0(round(100*(1-(sum(master_pred$pred_facturacion)/1000000)/sum(resumen_inicial$venta_total)),0),"%"), titulo =  paste0(round(100*(sum(resumen_inicial$venta_total)/(sum(sample[mes == mesdialy]$venta,na.rm=T)/1000000)-1),0),"%") )
 
 setnames(total_mo,colnames(total_mo),c('Total MO','vs Previsión',titulo))
 
@@ -285,7 +298,9 @@ kable(total_mo,align = 'c', format='latex',linesep = "") %>%
 
 ## COLMENA VARA DE QUART - VLC1
 
+\centering 
 ![ ](images/vlc.pdf)
+
 
 ```{r setup_vlc1, echo=FALSE}
 
@@ -303,7 +318,8 @@ obj_error <- c(0.072,0.024)
 ## 1. RESULTADOS VLC1
 
 1.a Venta vs Previsión
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_vlc1_1, echo=FALSE}
 
 # PROCESADO DATOS VENTA ACTUALES & PREVISIONES  -------------------------------------------------
@@ -362,20 +378,24 @@ venta_prev_tabla <- venta_prev[,` `:=c('Previsión','Real','Diferencia')]
 venta_prev_tabla_1 <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
 # ---------------------------------- PLOT  -------------------------------------------------
+venta_prev_tabla_plot <- venta_prev_tabla_1[c(2,1,3)]
 
-kable(venta_prev_tabla_1,align = 'c', format='latex') %>%
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
-  kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  kable_styling(latex_options ="scale_down")%>%
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#13C745')%>%
+  row_spec(3, italic = T, color = "black", background='#8aedc1')
 
 
 ```
-
+\renewcommand{\arraystretch}{1}
 
 \vspace{0.5cm}
 
 1.b Venta vs Año Anterior
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_vlc1_2, echo=FALSE}
 
 # PROCESADO DATOS VENTA ACTUALES & AÑO PASADO  -------------------------------------------------
@@ -404,13 +424,17 @@ venta_prev_tabla <- venta_prev[,` `:=c(mesly,mes,'Diferencia')]
 venta_prev_tabla <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
 # ---------------------------------- PLOT  -------------------------------------------------
+venta_prev_tabla_plot <- venta_prev_tabla[c(2,1,3)]
 
-kable(venta_prev_tabla,align = 'c', format='latex') %>%
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#13C745')%>%
+  row_spec(3, italic = T, color = "black", background='#8aedc1')
 
 ```
+\renewcommand{\arraystretch}{1}
 
 ## 2. AJUSTES FLASH VLC1
 
@@ -440,7 +464,7 @@ cat("¡MES SIN AJUSTES! :)")
 
 # ---------------------------------- PLOT --------------------------------------------------------
 
-rownames(previs) <- c('Columnas','Importe')
+#rownames(previs) <- c('Columnas','Importe')
 
 ggplot(previs, aes(x = date, y = VAR)) +
   geom_bar(stat = "identity", fill = "#4daf4a") +
@@ -462,11 +486,18 @@ ggplot(previs, aes(x = date, y = VAR)) +
 
 # CALCULO DE TICKET MEDIO POR COLUMNAS AJUSTADAS --------------------------------------------------
 
+ocupacion_despues <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$expected_columns)
+
+ocupacion_antes <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$original_columns)
+
+diff <- round(100*(ocupacion_despues-ocupacion_antes),1)
+
+
 preciomedio <- sum((venta_now$venta)/sum(venta_now$pedidos))
 ajustes <- data.table('Subidas Flash' = c(sum(previs[VAR>0]$VAR),paste0(round(sum(previs[VAR>0]$VAR)*preciomedio/1000,1)," mil €")), 
-                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),""))
+                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),if (diff > 0) {paste0("+",diff,"% ocupación")} else {"-"} ))
 
-ajustes[,'':=c('Columnas','Importe')]
+ajustes[,'':=c('Columnas','Impacto')]
 ajustes <- ajustes[,c(3,1,2)]
 
 ## ---------------------------------- PLOT --------------------------------------------------------
@@ -474,7 +505,8 @@ ajustes <- ajustes[,c(3,1,2)]
 kable(ajustes,align = 'c', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(font_size = 7)%>%
-  collapse_rows(3,latex_hline = "major", valign = "middle")
+  collapse_rows(3,latex_hline = "major", valign = "middle")%>%
+  row_spec(0,bold=T)
 
 ```
 
@@ -508,7 +540,9 @@ setnames(error_box,colnames(error_box),c('Tipo error','Objetivo','Real'))
 
 kable(error_box,align = 'l', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
-  kable_styling(font_size = 7)
+  kable_styling(font_size = 7)%>%
+  column_spec(ncol(ajustes), bold = T)%>%
+  row_spec(0,bold=T)
 ```
 
 ::::
@@ -532,6 +566,10 @@ annotate("segment", x = 0.5, xend = 1.5, y = obj_error[1], yend = obj_error[1], 
     annotate("segment", x = 1.5, xend = 2.5, y = obj_error[2], yend = obj_error[2], linetype = "dashed", color = "black", size = 1)+
     geom_text(aes(x = 1.4, y = obj_error[1]+0.001, label = paste0(round(100*obj_error[1],1),"%")), color = "black", vjust = 0, size = 4) +
     geom_text(aes(x = 2.4, y = obj_error[2]+0.001, label = paste0(round(100*obj_error[2],1),"%")), color = "black", vjust = 0, size = 4)
+
+
+setorder(error,-'Valor')
+
 ```
 
 ::::
@@ -542,11 +580,11 @@ annotate("segment", x = 0.5, xend = 1.5, y = obj_error[1], yend = obj_error[1], 
 
 - *Crecimiento*: `r venta_prev[3]$Venta` en venta contra `r mesly` (`r round(100*(prueba[7]$V2-prueba[7]$V1)/prueba[7]$V1,1)`% en pedidos + `r round(100*(prueba[.N]$V2-prueba[.N]$V1)/prueba[.N]$V1,1)`% en pedido promedio)
 
-- *Ocupación*: `r venta_prev[2]$Ocupación`
+- *Ocupación*: `r venta_prev[2]$Ocupación`, donde el TM ha tenido un `r trunc(turno[colmena==hive_code & turno == 'Mañana']$ocupacion*100,0)`% y el TT un `r trunc(turno[colmena==hive_code & turno == 'Tarde']$ocupacion*100,0)`%
 
 - *Previsiones*: `r if (error[Modo=='Oferta']$Total[1]<obj_error[1] & error[Modo=='Unidades']$Total[1]<obj_error[2]) {'Ambos errores están **OK** con el objetivo de Negocio'} else if (error[Modo=='Oferta']$Total[1]<obj_error[1]) {'La previsión de uds/columna está KO'} else if (error[Modo=='Unidades']$Total[1]<obj_error[1]) {'La previsión de la oferta está KO'} else {'Ambas previsiones están **KO** con el objetivo de Negocio.'}`.
-  - Error de la oferta: `r error_box[1,3]` por quedarse `r if (error[Modo=='Oferta']$Valor[1]>error[Modo=='Oferta']$Valor[2]) {'corto'} else {'largo'}`.
-  - Error de unidades por columna: `r error_box[2,3]` por quedarse `r if (error[Modo=='Unidades']$Valor[1]>error[Modo=='Unidades']$Valor[2]) {'corto'} else {'largo'}`.
+  - Error de la oferta: `r error_box[1,3]` por quedarse `r error[Modo=='Oferta']$Tipo[1]`.
+  - Error de unidades por columna: `r error_box[2,3]` por quedarse `r error[Modo=='Unidades']$Tipo[1]`.
 
 - *Disponibilidad*: puntuación de `r round(dispo[centro==hive]$dispo,1)` (media de `r round(ddc[hive_code==hive]$dias_de_cola,1)` días de cola).
 
@@ -557,7 +595,7 @@ annotate("segment", x = 0.5, xend = 1.5, y = obj_error[1], yend = obj_error[1], 
 
 ## COLMENA ZONA FRANCA - BCN1
 
-
+\centering
 ![ ](images/bcn.pdf)
 
 
@@ -578,7 +616,8 @@ hive <- hive_code
 ## 1. RESULTADOS BCN1
 
 1.a Venta vs Previsión
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_bcn1_1, echo=FALSE}
 venta_now <- sample[hive_code==hive & mes == mesdia][business_model%in%c('Colmena')]
 
@@ -613,19 +652,25 @@ venta_prev[,`Pedido Promedio`:=paste0(`Pedido Promedio`,"€")]
 venta_prev_tabla <- venta_prev[,` `:=c('Previsión','Real','Diferencia')]
 venta_prev_tabla_1 <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
-kable(venta_prev_tabla_1,align = 'c', format='latex') %>%
+
+venta_prev_tabla_plot <- venta_prev_tabla_1[c(2,1,3)]
+
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#006AE7')%>%
+  row_spec(3, italic = T, color = "black", background='#9dc7fa')
 
 
 ```
-
+\renewcommand{\arraystretch}{1}
 
 \vspace{0.5cm}
 
 1.b Venta vs Año Anterior
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_bcn1_2, echo=FALSE}
 
 venta_now <- sample[hive_code==hive & mes ==  mesdia][business_model%in%c('Colmena')]
@@ -649,12 +694,18 @@ venta_prev[,`Pedido Promedio`:=paste0(`Pedido Promedio`,"€")]
 venta_prev_tabla <- venta_prev[,` `:=c(mesly,mes,'Diferencia')]
 venta_prev_tabla <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
-kable(venta_prev_tabla,align = 'c', format='latex') %>%
+venta_prev_tabla_plot <- venta_prev_tabla[c(2,1,3)]
+
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#006AE7')%>%
+  row_spec(3, italic = T, color = "black", background='#9dc7fa')
 
 ```
+\renewcommand{\arraystretch}{1}
+
 
 ## 2. AJUSTES FLASH BCN1
 
@@ -687,17 +738,24 @@ ggplot(previs, aes(x = date, y = VAR)) +
 
 ```{r conditional_block_bcn1_3, echo=FALSE,eval=!show_text,results='asis',fig.keep="last",out.width=0.5}
 
+ocupacion_despues <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$expected_columns)
+
+ocupacion_antes <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$original_columns)
+
+diff <- round(100*(ocupacion_despues-ocupacion_antes),1)
+
+
 preciomedio <- sum((venta_now$venta)/sum(venta_now$pedidos))
 ajustes <- data.table('Subidas Flash' = c(sum(previs[VAR>0]$VAR),paste0(round(sum(previs[VAR>0]$VAR)*preciomedio/1000,1)," mil €")), 
-                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),paste0(round(sum(previs[VAR<0]$VAR)*preciomedio/1000,1)," mil €")),
-                      'Total' = c(sum(previs[VAR>0]$VAR)+sum(previs[VAR<0]$VAR),paste0(round(preciomedio*(sum(previs[VAR>0]$VAR)+sum(previs[VAR<0]$VAR))/1000,1)," mil €")))
+                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),if (diff > 0) {paste0("+",diff,"% ocupación")} else {"-"} ))
 
-ajustes[,'':=c('Columnas','Importe')]
-ajustes <- ajustes[,c(4,1,2,3)]
+ajustes[,'':=c('Columnas','Impacto')]
+ajustes <- ajustes[,c(3,1,2)]
 
 kable(ajustes,align = 'c', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
-  kable_styling(font_size = 7)
+  kable_styling(font_size = 7)%>%
+  row_spec(0,bold=T)
 
 ```
 
@@ -725,7 +783,9 @@ setnames(error_box,colnames(error_box),c('Tipo error','Objetivo','Real'))
 
 kable(error_box,align = 'l', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
-  kable_styling(font_size = 7)
+  kable_styling(font_size = 7)%>%
+  row_spec(0,bold=T)%>%
+  column_spec(3,bold=T)
 ```
 
 ::::
@@ -747,6 +807,8 @@ annotate("segment", x = 0.5, xend = 1.5, y = obj_error[1], yend = obj_error[1], 
     annotate("segment", x = 1.5, xend = 2.5, y = obj_error[2], yend = obj_error[2], linetype = "dashed", color = "black", size = 1)+
     geom_text(aes(x = 1.4, y = obj_error[1]+0.001, label = paste0(round(100*obj_error[1],1),"%")), color = "black", vjust = 0, size = 4) +
     geom_text(aes(x = 2.4, y = obj_error[2]+0.001, label = paste0(round(100*obj_error[2],1),"%")), color = "black", vjust = 0, size = 4)
+
+setorder(error,-'Valor')
 ```
 
 ::::
@@ -757,19 +819,22 @@ annotate("segment", x = 0.5, xend = 1.5, y = obj_error[1], yend = obj_error[1], 
 
 - *Crecimiento*: `r venta_prev[3]$Venta` en venta contra `r mesly` (`r round(100*(prueba[7]$V2-prueba[7]$V1)/prueba[7]$V1,1)`% en pedidos + `r round(100*(prueba[.N]$V2-prueba[.N]$V1)/prueba[.N]$V1,1)`% en pedido promedio)
 
-- *Ocupación*: `r venta_prev[2]$Ocupación`
+- *Ocupación*: `r venta_prev[2]$Ocupación`, donde el TM ha tenido un `r trunc(turno[colmena==hive_code & turno == 'Mañana']$ocupacion*100,0)`% y el TT un `r trunc(turno[colmena==hive_code & turno == 'Tarde']$ocupacion*100,0)`%
 
 - *Previsiones*: `r if (error[Modo=='Oferta']$Total[1]<obj_error[1] & error[Modo=='Unidades']$Total[1]<obj_error[2]) {'Ambos errores están **OK** con el objetivo de Negocio'} else if (error[Modo=='Oferta']$Total[1]<obj_error[1]) {'La previsión de uds/columna está KO'} else if (error[Modo=='Unidades']$Total[1]<obj_error[1]) {'La previsión de la oferta está KO'} else {'Ambas previsiones están **KO** con el objetivo de Negocio.'}`.
-  - Error de la oferta: `r error_box[1,3]` por quedarse `r if (error[Modo=='Oferta']$Valor[1]>error[Modo=='Oferta']$Valor[2]) {'corto'} else {'largo'}`.
-  - Error de unidades por columna: `r error_box[2,3]` por quedarse `r if (error[Modo=='Unidades']$Valor[1]>error[Modo=='Unidades']$Valor[2]) {'corto'} else {'largo'}`.
+  - Error de la oferta: `r error_box[1,3]` por quedarse `r error[Modo=='Oferta']$Tipo[1]`.
+  - Error de unidades por columna: `r error_box[2,3]` por quedarse `r error[Modo=='Unidades']$Tipo[1]`.
 
 - *Disponibilidad*: puntuación de `r round(dispo[centro==hive]$dispo,1)` (media de `r round(ddc[hive_code==hive]$dias_de_cola,1)` días de cola).
 
 - *CuVo*: con `r cuvo[centro==hive]$inputs` CuVo's de “disponibilidad”, estos representan un `r round(100*cuvo[centro==hive]$porc_sobre_pedidos,2)`% sobre el total de pedidos del mes.
 
+`r if (is.na(init[Variable==hive]$Value)) {} else { paste0('- *Resumen:* ',init[Variable==hive]$Value)}`
+
 
 ## COLMENA GETAFE - MAD1 
 
+\centering
 ![ ](images/mad.pdf)
 
 ```{r setup_mad1, echo=FALSE}
@@ -791,7 +856,8 @@ hive <- hive_code
 ## 1. RESULTADOS MAD1
 
 1.a Venta vs Previsión
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_mad1_1, echo=FALSE}
 venta_now <- sample[hive_code==hive & mes == mesdia][business_model%in%c('Colmena')]
 
@@ -826,19 +892,24 @@ venta_prev[,`Pedido Promedio`:=paste0(`Pedido Promedio`,"€")]
 venta_prev_tabla <- venta_prev[,` `:=c('Previsión','Real','Diferencia')]
 venta_prev_tabla_1 <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
-kable(venta_prev_tabla_1,align = 'c', format='latex') %>%
+venta_prev_tabla_plot <- venta_prev_tabla_1[c(2,1,3)]
+
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#F0371E')%>%
+  row_spec(3, italic = T, color = "black", background='#fc8f81')
 
 
 ```
-
+\renewcommand{\arraystretch}{1}
 
 \vspace{0.5cm}
 
 1.b Venta vs Año Anterior 
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_mad1_2, echo=FALSE}
 
 venta_now <- sample[hive_code==hive & mes == mesdia][business_model%in%c('Colmena')]
@@ -862,12 +933,17 @@ venta_prev[,`Pedido Promedio`:=paste0(`Pedido Promedio`,"€")]
 venta_prev_tabla <- venta_prev[,` `:=c(mesly,mes,'Diferencia')]
 venta_prev_tabla <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
-kable(venta_prev_tabla,align = 'c', format='latex') %>%
+venta_prev_tabla_plot <- venta_prev_tabla[c(2,1,3)]
+
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#F0371E')%>%
+  row_spec(3, italic = T, color = "black", background='#fc8f81')
 
 ```
+\renewcommand{\arraystretch}{1}
 
 ## 2. AJUSTES FLASH MAD1
 
@@ -901,17 +977,24 @@ ggplot(previs, aes(x = date, y = VAR)) +
 
 ```{r asdfg_mad1, echo=FALSE,eval=!show_text,results='asis',fig.keep="last",out.width=0.5}
 
+ocupacion_despues <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$expected_columns)
+
+ocupacion_antes <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$original_columns)
+
+diff <- round(100*(ocupacion_despues-ocupacion_antes),1)
+
+
 preciomedio <- sum((venta_now$venta)/sum(venta_now$pedidos))
 ajustes <- data.table('Subidas Flash' = c(sum(previs[VAR>0]$VAR),paste0(round(sum(previs[VAR>0]$VAR)*preciomedio/1000,1)," mil €")), 
-                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),paste0(round(sum(previs[VAR<0]$VAR)*preciomedio/1000,1)," mil €")),
-                      'Total' = c(sum(previs[VAR>0]$VAR)+sum(previs[VAR<0]$VAR),paste0(round(preciomedio*(sum(previs[VAR>0]$VAR)+sum(previs[VAR<0]$VAR))/1000,1)," mil €")))
+                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),if (diff > 0) {paste0("+",diff,"% ocupación")} else {"-"} ))
 
-ajustes[,'':=c('Columnas','Importe')]
-ajustes <- ajustes[,c(4,1,2,3)]
+ajustes[,'':=c('Columnas','Impacto')]
+ajustes <- ajustes[,c(3,1,2)]
 
 kable(ajustes,align = 'c', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
-  kable_styling(font_size = 7)
+  kable_styling(font_size = 7)%>%
+  row_spec(0,bold=T)
 
 ```
 
@@ -939,7 +1022,9 @@ setnames(error_box,colnames(error_box),c('Tipo error','Objetivo','Real'))
 
 kable(error_box,align = 'l', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
-  kable_styling(font_size = 7)
+  kable_styling(font_size = 7)%>%
+  row_spec(0,bold=T)%>%
+  column_spec(3,bold=T)
 ```
 
 ::::
@@ -961,6 +1046,8 @@ annotate("segment", x = 0.5, xend = 1.5, y = obj_error[1], yend = obj_error[1], 
     annotate("segment", x = 1.5, xend = 2.5, y = obj_error[2], yend = obj_error[2], linetype = "dashed", color = "black", size = 1)+
     geom_text(aes(x = 1.4, y = obj_error[1]+0.001, label = paste0(round(100*obj_error[1],1),"%")), color = "black", vjust = 0, size = 4) +
     geom_text(aes(x = 2.4, y = obj_error[2]+0.001, label = paste0(round(100*obj_error[2],1),"%")), color = "black", vjust = 0, size = 4)
+
+setorder(error,-'Valor')
 ```
 
 ::::
@@ -971,20 +1058,22 @@ annotate("segment", x = 0.5, xend = 1.5, y = obj_error[1], yend = obj_error[1], 
 
 - *Crecimiento*: `r venta_prev[3]$Venta` en venta contra `r mesly` (`r round(100*(prueba[7]$V2-prueba[7]$V1)/prueba[7]$V1,1)`% en pedidos + `r round(100*(prueba[.N]$V2-prueba[.N]$V1)/prueba[.N]$V1,1)`% en pedido promedio)
 
-- *Ocupación*: `r venta_prev[2]$Ocupación`
+- *Ocupación*: `r venta_prev[2]$Ocupación`, donde el TM ha tenido un `r trunc(turno[colmena==hive_code & turno == 'Mañana']$ocupacion*100,0)`% y el TT un `r trunc(turno[colmena==hive_code & turno == 'Tarde']$ocupacion*100,0)`%
 
 - *Previsiones*: `r if (error[Modo=='Oferta']$Total[1]<obj_error[1] & error[Modo=='Unidades']$Total[1]<obj_error[2]) {'Ambos errores están **OK** con el objetivo de Negocio'} else if (error[Modo=='Oferta']$Total[1]<obj_error[1]) {'La previsión de uds/columna está KO'} else if (error[Modo=='Unidades']$Total[1]<obj_error[1]) {'La previsión de la oferta está KO'} else {'Ambas previsiones están **KO** con el objetivo de Negocio.'}`.
-  - Error de la oferta: `r error_box[1,3]` por quedarse `r if (error[Modo=='Oferta']$Valor[1]>error[Modo=='Oferta']$Valor[2]) {'corto'} else {'largo'}`.
-  - Error de unidades por columna: `r error_box[2,3]` por quedarse `r if (error[Modo=='Unidades']$Valor[1]>error[Modo=='Unidades']$Valor[2]) {'corto'} else {'largo'}`.
+  - Error de la oferta: `r error_box[1,3]` por quedarse `r error[Modo=='Oferta']$Tipo[1]`.
+  - Error de unidades por columna: `r error_box[2,3]` por quedarse `r error[Modo=='Unidades']$Tipo[1]`.
 
 - *Disponibilidad*: puntuación de `r round(dispo[centro==hive]$dispo,1)` (media de `r round(ddc[hive_code==hive]$dias_de_cola,1)` días de cola).
 
 - *CuVo*: con `r cuvo[centro==hive]$inputs` CuVo's de “disponibilidad”, estos representan un `r round(100*cuvo[centro==hive]$porc_sobre_pedidos,2)`% sobre el total de pedidos del mes.
 
+`r if (is.na(init[Variable==hive]$Value)) {} else { paste0('- *Resumen:* ',init[Variable==hive]$Value)}`
+
 
 ## COLMENA ALICANTE - ALC1
 
-
+\centering
 ![ ](images/alc.pdf)
 
 ```{r setup_alc1, echo=FALSE}
@@ -1002,11 +1091,11 @@ hive <- hive_code
 ```
 
 
-
 ## 1. RESULTADOS ALC1
 
 1.a Venta vs Previsión
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_alc1_1, echo=FALSE}
 venta_now <- sample[hive_code==hive & mes == mesdia][business_model%in%c('Colmena')]
 
@@ -1041,18 +1130,23 @@ venta_prev[,`Pedido Promedio`:=paste0(`Pedido Promedio`,"€")]
 venta_prev_tabla <- venta_prev[,` `:=c('Previsión','Real','Diferencia')]
 venta_prev_tabla_1 <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
-kable(venta_prev_tabla_1,align = 'c', format='latex') %>%
+venta_prev_tabla_plot <- venta_prev_tabla_1[c(2,1,3)]
+
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#F0BB00')%>%
+  row_spec(3, italic = T, color = "black", background='#fadf7d')
 
 ```
-
+\renewcommand{\arraystretch}{1}
 
 \vspace{0.5cm}
 
 1.b Venta vs Año Anterior
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_alc1_2, echo=FALSE}
 
 venta_now <- sample[hive_code==hive & mes == mesdia][business_model%in%c('Colmena')]
@@ -1076,12 +1170,17 @@ venta_prev[,`Pedido Promedio`:=paste0(`Pedido Promedio`,"€")]
 venta_prev_tabla <- venta_prev[,` `:=c(mesly,mes,'Diferencia')]
 venta_prev_tabla <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
-kable(venta_prev_tabla,align = 'c', format='latex') %>%
+venta_prev_tabla_plot <- venta_prev_tabla[c(2,1,3)]
+
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#F0BB00')%>%
+  row_spec(3, italic = T, color = "black", background='#fadf7d')
 
 ```
+\renewcommand{\arraystretch}{1}
 
 ## 2. AJUSTES FLASH ALC1
 
@@ -1115,11 +1214,18 @@ ggplot(previs, aes(x = date, y = VAR)) +
 
 ```{r asdfg_alc1, echo=FALSE,eval=!show_text,results='asis',fig.keep="last",out.width=0.5}
 
+ocupacion_despues <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$expected_columns)
+
+ocupacion_antes <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$original_columns)
+
+diff <- round(100*(ocupacion_despues-ocupacion_antes),1)
+
+
 preciomedio <- sum((venta_now$venta)/sum(venta_now$pedidos))
 ajustes <- data.table('Subidas Flash' = c(sum(previs[VAR>0]$VAR),paste0(round(sum(previs[VAR>0]$VAR)*preciomedio/1000,1)," mil €")), 
-                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),""))
+                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),if (diff > 0) {paste0("+",diff,"% ocupación")} else {"-"} ))
 
-ajustes[,'':=c('Columnas','Importe')]
+ajustes[,'':=c('Columnas','Impacto')]
 ajustes <- ajustes[,c(3,1,2)]
 
 ## ---------------------------------- PLOT --------------------------------------------------------
@@ -1127,8 +1233,7 @@ ajustes <- ajustes[,c(3,1,2)]
 kable(ajustes,align = 'c', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(font_size = 7)%>%
-  collapse_rows(3,latex_hline = "major", valign = "middle")
-
+  row_spec(0,bold=T)
 ```
 
 
@@ -1155,7 +1260,9 @@ setnames(error_box,colnames(error_box),c('Tipo error','Objetivo','Real'))
 
 kable(error_box,align = 'l', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
-  kable_styling(font_size = 7)
+  kable_styling(font_size = 7)%>%
+  row_spec(0,bold=T)%>%
+  column_spec(3,bold=T)
 ```
 
 ::::
@@ -1177,6 +1284,9 @@ annotate("segment", x = 0.5, xend = 1.5, y = obj_error[1], yend = obj_error[1], 
     annotate("segment", x = 1.5, xend = 2.5, y = obj_error[2], yend = obj_error[2], linetype = "dashed", color = "black", size = 1)+
     geom_text(aes(x = 1.4, y = obj_error[1]+0.001, label = paste0(round(100*obj_error[1],1),"%")), color = "black", vjust = 0, size = 4) +
     geom_text(aes(x = 2.4, y = obj_error[2]+0.001, label = paste0(round(100*obj_error[2],1),"%")), color = "black", vjust = 0, size = 4)
+
+
+setorder(error,-'Valor')
 ```
 
 ::::
@@ -1187,21 +1297,22 @@ annotate("segment", x = 0.5, xend = 1.5, y = obj_error[1], yend = obj_error[1], 
 
 - *Crecimiento*: `r venta_prev[3]$Venta` en venta contra `r mesly` (`r round(100*(prueba[7]$V2-prueba[7]$V1)/prueba[7]$V1,1)`% en pedidos + `r round(100*(prueba[.N]$V2-prueba[.N]$V1)/prueba[.N]$V1,1)`% en pedido promedio)
 
-- *Ocupación*: `r venta_prev[2]$Ocupación`
+- *Ocupación*: `r venta_prev[2]$Ocupación`, donde el TM ha tenido un `r trunc(turno[colmena==hive_code & turno == 'Mañana']$ocupacion*100,0)`% y el TT un `r trunc(turno[colmena==hive_code & turno == 'Tarde']$ocupacion*100,0)`%
 
 - *Previsiones*: `r if (error[Modo=='Oferta']$Total[1]<obj_error[1] & error[Modo=='Unidades']$Total[1]<obj_error[2]) {'Ambos errores están **OK** con el objetivo de Negocio'} else if (error[Modo=='Oferta']$Total[1]<obj_error[1]) {'La previsión de uds/columna está KO'} else if (error[Modo=='Unidades']$Total[1]<obj_error[1]) {'La previsión de la oferta está KO'} else {'Ambas previsiones están **KO** con el objetivo de Negocio.'}`.
-  - Error de la oferta: `r error_box[1,3]` por quedarse `r if (error[Modo=='Oferta']$Valor[1]>error[Modo=='Oferta']$Valor[2]) {'corto'} else {'largo'}`.
-  - Error de unidades por columna: `r error_box[2,3]` por quedarse `r if (error[Modo=='Unidades']$Valor[1]>error[Modo=='Unidades']$Valor[2]) {'corto'} else {'largo'}`.
+  - Error de la oferta: `r error_box[1,3]` por quedarse `r error[Modo=='Oferta']$Tipo[1]`.
+  - Error de unidades por columna: `r error_box[2,3]` por quedarse `r error[Modo=='Unidades']$Tipo[1]`.
 
 - *Disponibilidad*: puntuación de `r round(dispo[centro==hive]$dispo,1)` (media de `r round(ddc[hive_code==hive]$dias_de_cola,1)` días de cola).
 
 - *CuVo*: con `r cuvo[centro==hive]$inputs` CuVo's de “disponibilidad”, estos representan un `r round(100*cuvo[centro==hive]$porc_sobre_pedidos,2)`% sobre el total de pedidos del mes.
 
+`r if (is.na(init[Variable==hive]$Value)) {} else { paste0('- *Resumen:* ',init[Variable==hive]$Value)}`
 
 
 ## COLMENA SEVILLA - SVQ1
 
-
+\centering
 ![ ](images/svq.pdf)
 
 ```{r setup_svq1, echo=FALSE}
@@ -1223,7 +1334,8 @@ hive <- hive_code
 ## 1. RESULTADOS SVQ1
 
 1.a Venta vs Previsión
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_svq1_1, echo=FALSE}
 venta_now <- sample[hive_code==hive & mes == mesdia][business_model%in%c('Colmena','Panal_Salinas')]
 
@@ -1258,20 +1370,24 @@ venta_prev[,`Pedido Promedio`:=paste0(`Pedido Promedio`,"€")]
 venta_prev_tabla <- venta_prev[,` `:=c('Previsión','Real','Diferencia')]
 venta_prev_tabla_1 <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
-kable(venta_prev_tabla_1,align = 'c', format='latex') %>%
+venta_prev_tabla_plot <- venta_prev_tabla_1[c(2,1,3)]
+
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#BF56E4')%>%
+  row_spec(3, italic = T, color = "black", background='#d6a5e8')
 
 
 ```
-
+\renewcommand{\arraystretch}{1}
 
 \vspace{0.5cm}
 
 1.b Venta vs Año Pasado
-
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_svq1_2, echo=FALSE}
 
 venta_now <- sample[hive_code==hive & mes == mesdia][business_model%in%c('Colmena','Panal_Salinas')]
@@ -1295,13 +1411,17 @@ venta_prev[,`Pedido Promedio`:=paste0(`Pedido Promedio`,"€")]
 venta_prev_tabla <- venta_prev[,` `:=c(mesly,mes,'Diferencia')]
 venta_prev_tabla <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
-kable(venta_prev_tabla,align = 'c', format='latex') %>%
+venta_prev_tabla_plot <- venta_prev_tabla[c(2,1,3)]
+
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#BF56E4')%>%
+  row_spec(3, italic = T, color = "black", background='#d6a5e8')
 
 ```
-
+\renewcommand{\arraystretch}{1}
 
 ## 2. AJUSTES FLASH SVQ1
 
@@ -1335,13 +1455,19 @@ ggplot(previs, aes(x = date, y = VAR)) +
 
 ```{r asdfg_svq1, echo=FALSE,eval=!show_text,results='asis',fig.keep="last",out.width=0.5}
 
+ocupacion_despues <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$expected_columns)
+
+ocupacion_antes <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$original_columns)
+
+diff <- round(100*(ocupacion_despues-ocupacion_antes),1)
+
+
 preciomedio <- sum((venta_now$venta)/sum(venta_now$pedidos))
 ajustes <- data.table('Subidas Flash' = c(sum(previs[VAR>0]$VAR),paste0(round(sum(previs[VAR>0]$VAR)*preciomedio/1000,1)," mil €")), 
-                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),paste0(round(sum(previs[VAR<0]$VAR)*preciomedio/1000,1)," mil €")),
-                      'Total' = c(sum(previs[VAR>0]$VAR)+sum(previs[VAR<0]$VAR),paste0(round(preciomedio*(sum(previs[VAR>0]$VAR)+sum(previs[VAR<0]$VAR))/1000,1)," mil €")))
+                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),if (diff > 0) {paste0("+",diff,"% ocupación")} else {"-"} ))
 
-ajustes[,'':=c('Columnas','Importe')]
-ajustes <- ajustes[,c(4,1,2,3)]
+ajustes[,'':=c('Columnas','Impacto')]
+ajustes <- ajustes[,c(3,1,2)]
 
 kable(ajustes,align = 'c', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
@@ -1391,6 +1517,9 @@ ggplot(error, aes(fill=Tipo, y=Valor, x=Modo)) +  geom_bar(position="stack", sta
     scale_fill_manual(values = c("#BF56E4","#713287"))+ 
     theme(axis.text = element_text(size = 15),axis.title=element_blank(), aspect.ratio = 1.5)+
     scale_y_continuous(labels = label_percent(scale = 100))
+
+
+setorder(error,-'Valor')
 ```
 
 ::::
@@ -1401,20 +1530,21 @@ ggplot(error, aes(fill=Tipo, y=Valor, x=Modo)) +  geom_bar(position="stack", sta
 
 - *Crecimiento*: `r venta_prev[3]$Venta` en venta contra `r mesly` (`r round(100*(prueba[7]$V2-prueba[7]$V1)/prueba[7]$V1,1)`% en pedidos + `r round(100*(prueba[.N]$V2-prueba[.N]$V1)/prueba[.N]$V1,1)`% en pedido promedio)
 
-- *Ocupación*: `r venta_prev[2]$Ocupación`
+- *Ocupación*: `r venta_prev[2]$Ocupación` con panales, mientras que el TM en colmena ha tenido un `r trunc(turno[colmena==hive_code & turno == 'Mañana']$ocupacion*100,0)`% y el TT un `r trunc(turno[colmena==hive_code & turno == 'Tarde']$ocupacion*100,0)`%
 
 - *Previsiones*:
-  - Error de la oferta: `r error_box[1,3]` por quedarse `r if (error[Modo=='Oferta']$Valor[1]>error[Modo=='Oferta']$Valor[2]) {'corto'} else {'largo'}`.
-  - Error de unidades por columna: `r error_box[2,3]` por quedarse `r if (error[Modo=='Unidades']$Valor[1]>error[Modo=='Unidades']$Valor[2]) {'corto'} else {'largo'}`.
+  - Error de la oferta: `r error_box[1,3]` por quedarse `r error[Modo=='Oferta']$Tipo[1]`.
+  - Error de unidades por columna: `r error_box[2,3]` por quedarse `r error[Modo=='Unidades']$Tipo[1]`.
 
 - *Disponibilidad*: puntuación de `r round(dispo[centro==hive]$dispo,1)` (media de `r round(ddc[hive_code==hive]$dias_de_cola,1)` días de cola).
 
 - *CuVo*: con `r cuvo[centro==hive]$inputs` CuVo's de “disponibilidad”, estos representan un `r round(100*cuvo[centro==hive]$porc_sobre_pedidos,2)`% sobre el total de pedidos del mes.
 
+`r if (is.na(init[Variable==hive]$Value)) {} else { paste0('- *Resumen:* ',init[Variable==hive]$Value)}`
 
 ## MINICOLMENA BOADILLA - MAD2
 
-
+\centering
 ![ ](images/mad2.pdf)
 
 ```{r setup_mad2, echo=FALSE}
@@ -1436,7 +1566,8 @@ hive <- hive_code
 ## 1. RESULTADOS MAD2
 
 1.a Venta vs Previsión
-
+\vspace{-0.5cm}
+\renewcommand{\arraystretch}{1.7}
 ```{r resultados_mad2_1, echo=FALSE}
 venta_now <- sample[hive_code==hive & mes == mesdia][business_model%in%c('Colmena')]
 
@@ -1471,14 +1602,18 @@ venta_prev[,`Pedido Promedio`:=paste0(`Pedido Promedio`,"€")]
 venta_prev_tabla <- venta_prev[,` `:=c('Previsión','Real','Diferencia')]
 venta_prev_tabla_1 <- venta_prev_tabla[,c(9,1:3,4,5,7,8,6)]
 
-kable(venta_prev_tabla_1,align = 'c', format='latex') %>%
+venta_prev_tabla_plot <- venta_prev_tabla_1[c(2,1,3)]
+
+kable(venta_prev_tabla_plot,align = 'c', format='latex') %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(latex_options="scale_down")%>%
-  row_spec(0, bold = TRUE)
+  row_spec(0, bold = TRUE)%>%
+  row_spec(1, bold=T, font_size = 12,color = "white", background='#FFB5D4')%>%
+  row_spec(3, italic = T, color = "black", background='#fad2e3')
 
 
 ```
-
+\renewcommand{\arraystretch}{1}
 
 \vspace{0.5cm}
 
@@ -1487,7 +1622,7 @@ kable(venta_prev_tabla_1,align = 'c', format='latex') %>%
 ```{r mad2_multiplicador, echo=FALSE}
 
 mad_mult <- merge(tc_mad,postal_mad,by='Codigo Postal')
-mad_mult[,fecha_comparable:=first_service-394]
+mad_mult[,fecha_comparable:=first_service-364]
 mad_mult_mart <- mad_mult[fecha_comparable<`Fecha Entrega`]
 mad_mult_mart[,suma:=sum(`Total envíos TC`,na.rm=T),by='area_name']
 mult <- unique(mad_mult_mart[,c('area_name','suma')])
@@ -1500,7 +1635,7 @@ mult_final <- rbind(mult,data.table('Area' = 'MAD2', 'Mult v TC' = round(mean(mu
 kable(mult_final,align = 'c', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
   kable_styling(font_size = 7)%>%
-  row_spec(length(mult_final$Area),bold=T)
+  row_spec(length(mult_final$Area),font_size = 10,bold=T,color = "black", background='#fad2e3')
 
 setnames(mult_final,colnames(mult_final),c('Area','V2'))
 
@@ -1539,13 +1674,19 @@ ggplot(previs, aes(x = date, y = VAR)) +
 
 ```{r asdfg_mad2, echo=FALSE,eval=!show_text,results='asis',fig.keep="last",out.width=0.5}
 
+ocupacion_despues <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$expected_columns)
+
+ocupacion_antes <- sum(sample[hive_code==hive & mes == mesdia]$col_vendidas)/sum(previs_master[hive_code==hive & month(date)==mesnum]$original_columns)
+
+diff <- round(100*(ocupacion_despues-ocupacion_antes),1)
+
+
 preciomedio <- sum((venta_now$venta)/sum(venta_now$pedidos))
 ajustes <- data.table('Subidas Flash' = c(sum(previs[VAR>0]$VAR),paste0(round(sum(previs[VAR>0]$VAR)*preciomedio/1000,1)," mil €")), 
-                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),paste0(round(sum(previs[VAR<0]$VAR)*preciomedio/1000,1)," mil €")),
-                      'Total' = c(sum(previs[VAR>0]$VAR)+sum(previs[VAR<0]$VAR),paste0(round(preciomedio*(sum(previs[VAR>0]$VAR)+sum(previs[VAR<0]$VAR))/1000,1)," mil €")))
+                      'Bajadas Flash' = c(sum(previs[VAR<0]$VAR),if (diff > 0) {paste0("+",diff,"% ocupación")} else {"-"} ))
 
-ajustes[,'':=c('Columnas','Importe')]
-ajustes <- ajustes[,c(4,1,2,3)]
+ajustes[,'':=c('Columnas','Impacto')]
+ajustes <- ajustes[,c(3,1,2)]
 
 kable(ajustes,align = 'c', format='latex',linesep = "") %>%
   kable_paper("striped", full_width = F)%>% 
@@ -1592,6 +1733,9 @@ ggplot(error, aes(fill=Tipo, y=Valor, x=Modo)) +  geom_bar(position="stack", sta
     scale_fill_manual(values = c("#FFB5D4","#eb6aa0"))+ 
     theme(axis.text = element_text(size = 15),axis.title=element_blank(), aspect.ratio = 1.5)+
     scale_y_continuous(labels = label_percent(scale = 100))
+
+
+setorder(error,-'Valor')
 ```
 
 ::::
@@ -1602,14 +1746,16 @@ ggplot(error, aes(fill=Tipo, y=Valor, x=Modo)) +  geom_bar(position="stack", sta
 
 - *Crecimiento*: el multiplicador de la venta es de `r mult_final[.N]$V2` veces el volumen del mismo mes del año anterior en Telecompra.
 
-- *Ocupación*: `r venta_prev[2]$Ocupación`
+- *Ocupación*: `r venta_prev[2]$Ocupación`, donde el TM ha tenido un `r trunc(turno[colmena==hive_code & turno == 'Mañana']$ocupacion*100,0)`% y el TT un `r trunc(turno[colmena==hive_code & turno == 'Tarde']$ocupacion*100,0)`%
 
 - *Previsiones*:
-  - Error de unidades por columna: `r error_box[1,3]` por quedarse `r if (error[Modo=='Unidades']$Valor[1]>error[Modo=='Unidades']$Valor[2]) {'corto'} else {'largo'}`.
+  - Error de unidades por columna: `r error_box[1,3]` por quedarse `r error[Modo=='Unidades']$Tipo[1]`.
 
 - *Disponibilidad*: puntuación de `r round(dispo[centro==hive]$dispo,1)` (media de `r round(ddc[hive_code==hive]$dias_de_cola,1)` días de cola).
 
 - *CuVo*: con `r cuvo[centro==hive]$inputs` CuVo's de “disponibilidad”, estos representan un `r round(100*cuvo[centro==hive]$porc_sobre_pedidos,2)`% sobre el total de pedidos del mes.
+
+`r if (is.na(init[Variable==hive]$Value)) {} else { paste0('- *Resumen:* ',init[Variable==hive]$Value)}`
 
 ## NTC & NSD
 
@@ -1663,9 +1809,7 @@ ggplot(tiendas_base, aes(x = month, y = peso_venta))+
   theme(aspect.ratio = 1.1, axis.text = element_text(size = 13), axis.text.x = element_text(angle = 90, hjust = 1),plot.margin=unit(c(-0.10,0,0,0), "null"),panel.grid = element_blank(), axis.title.y = element_text(size=17, margin = margin(r = 20)))+
   geom_hline(yintercept = seq(0, 0.2, 0.05), linetype = "dashed", color = "gray") +
   # Display the latest value on top of the plot
-  geom_text(aes(x = tail(month, 1), y = tail(peso_venta,1), label = scales::percent(tail(peso_venta,1))),
-            vjust = -1.5, hjust = 1, color = "darkgray", size = 6)+
-  scale_x_date(date_labels = "%m-%y") 
+  geom_text(aes(x = tail(month, 1), y = tail(peso_venta,1), label = scales::percent(tail(peso_venta,1))),vjust = -1, hjust = 1, color = "darkgray", size = 6)+scale_x_date(date_labels = "%m-%y") 
 
 ```
 
@@ -1713,6 +1857,12 @@ ggplot(matriz_base, aes(x = ocupacion_nsd, y = ddc_nsd, size = 10, label = code)
 
 ```
 
-Hay un total de `r length(matriz_base[ocupacion_ntc > 0.8 & ddc_ntc < 1.5]$code)` NSD de `r length(matriz_base$code)` con una oferta bien dimensionada. La media de días de cola han sido `r round(mean(matriz_base$ddc_nsd,na.rm=T),1)`.
+Hay un total de `r length(matriz_base[ocupacion_nsd > 0.6 & ddc_nsd < 1.5]$code)` NSD de `r length(matriz_base$code)` con una oferta bien dimensionada. La media de días de cola han sido `r round(mean(matriz_base$ddc_nsd,na.rm=T),1)`.
 
-## ¡Gracias!
+## 
+\centering
+\LARGE \textbf{¡MUCHAS GRACIAS!}
+
+\centering
+\small \textit{¿Dudas?} $\rightarrow$ #digital_business
+
